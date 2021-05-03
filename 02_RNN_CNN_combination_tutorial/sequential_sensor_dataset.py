@@ -6,6 +6,7 @@ import csv
 import torch
 import torch.utils.data
 import torchvision.transforms.functional as TF
+from torchvision import transforms
 
 import PIL
 from PIL import Image
@@ -109,9 +110,9 @@ class dataset_dict_generator():
 class sequential_sensor_dataset(torch.utils.data.Dataset):
 
     def __init__(self, lidar_dataset_path='', img_dataset_path='', pose_dataset_path='',
-                       train_transform=None,
-                       valid_transform=None,
-                       test_transform=None,
+                       train_transform=transforms.Compose([]),
+                       valid_transform=transforms.Compose([]),
+                       test_transform=transforms.Compose([]),
                        train_sequence=['00'], valid_sequence=['01'], test_sequence=['02'],
                        mode='training', normalization=None,
                        sequence_length=1):
@@ -191,9 +192,17 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
                 ### Sequential Image Stacking ###
                 for idx in range(self.sequence_length):
 
-                    current_img = Image.open(item[idx][2])
+                    if self.mode == 'training':
+                        current_img = self.train_transform(Image.open(item[idx][2]))
+
+                    elif self.mode == 'validation':
+                        current_img = self.valid_transform(Image.open(item[idx][2]))
+
+                    elif self.mode == 'test':
+                        current_img = self.test_transform(Image.open(item[idx][2]))
+
                     current_img = np.expand_dims(current_img, axis=0)       # Add Sequence Length Dimension
-                    current_img = np.transpose(current_img, (0, 3, 1, 2))   # Re-Order the array into Channel-First Array
+                    # current_img = np.transpose(current_img, (0, 3, 1, 2))   # Re-Order the array into Channel-First Array
                     
                     if idx == 0:
                         img_stack = current_img
