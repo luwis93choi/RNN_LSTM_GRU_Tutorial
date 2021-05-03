@@ -4,8 +4,8 @@ lidar_dataset_path="/media/luwis/Linux Workspace/ICSL_Project/Visual SLAM/KITTI_
 image_dataset_path="/media/luwis/Linux Workspace/ICSL_Project/Visual SLAM/KITTI_data_odometry_color/dataset/sequences"
 pose_dataset_path="/media/luwis/Linux Workspace/ICSL_Project/Visual SLAM/KITTI_data_odometry_color/data_odometry_poses/dataset/poses"
 
-python3 main_sequential.py --input_lidar_file_path "$lidar_dataset_path" \
-                           --input_img_file_path "$image_dataset_path" \
-                           --input_pose_file_path "$pose_dataset_path" \
+python3 02_RNN_CNN_combination_tutorial.py --input_lidar_file_path "$lidar_dataset_path" \
+                                           --input_img_file_path "$image_dataset_path" \
+                                           --input_pose_file_path "$pose_dataset_path" \
 
 exit 0
