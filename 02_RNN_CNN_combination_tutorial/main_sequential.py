@@ -23,7 +23,7 @@ batch_size = 1
 dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
                                     img_dataset_path=args['input_img_file_path'], 
                                     pose_dataset_path=args['input_pose_file_path'],
-                                    train_sequence=['01', '02'], valid_sequence=['01'], test_sequence=['02'],
+                                    train_sequence=['00', '01', '02'], valid_sequence=['01'], test_sequence=['02'],
                                     sequence_length=5)
 
 dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=True)
