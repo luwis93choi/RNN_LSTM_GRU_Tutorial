@@ -1,4 +1,4 @@
-# Reference : CNN + RNN architecture for video recognition (https://stackoverflow.com/questions/63567352/cnn-rnn-architecture-for-video-recognition)
+# Reference : CNN + RNN - Concatenate time distributed CNN with LSTM (https://discuss.pytorch.org/t/solved-concatenate-time-distributed-cnn-with-lstm/15435/2)
 
 import torch
 import torch.nn as nn
@@ -76,7 +76,7 @@ class CNN_RNN(nn.Module):
         # print('Original shape : {}'.format(x.shape))
 
         ### Tensor reshaping for CNN ###        
-        x = x.view(batch_size * timestep, channel, height, width)
+        x = x.view(batch_size * timestep, channel, height, width)       # Align time step into batch dimension in order to apply same CNN for every image
         # print('Modified shape for CNN: {}'.format(x.shape))
 
         ### Feature Extraction with CNN ###

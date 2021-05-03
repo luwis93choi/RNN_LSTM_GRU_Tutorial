@@ -1,3 +1,5 @@
+# Reference : CNN + RNN - Concatenate time distributed CNN with LSTM (https://discuss.pytorch.org/t/solved-concatenate-time-distributed-cnn-with-lstm/15435/2)
+
 import os
 import argparse
 import cv2 as cv
