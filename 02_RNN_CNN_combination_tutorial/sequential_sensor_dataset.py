@@ -167,13 +167,20 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
             self.test_data_list.append(row_data)
         test_dataset_dict.close()
 
+
+    ### Invalid data filtering (Exception handling for dataloader) ###
+    # Reference : https://discuss.pytorch.org/t/questions-about-dataloader-and-dataset/806/3
+    def collate_fn(self, batch):
+        batch = list(filter(lambda x: x is not None, batch))
+        return torch.utils.data.dataloader.default_collate(batch)
+
     def __getitem__(self, index):
 
         if index < self.sequence_length:
 
             print('[Exception Skip] Data length lower than RNN sequence length')
 
-            return [], []
+            return None     # Invalid data exception handing with collate_fn
 
         else:
             if self.mode == 'training':
@@ -230,7 +237,7 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
 
                 print('[Exception Skip] Training sequence transition')
 
-                return [], []
+                return None     # Invalid data exception handing with collate_fn
 
     def __len__(self):
 
