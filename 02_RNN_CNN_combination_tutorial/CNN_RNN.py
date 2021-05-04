@@ -94,7 +94,7 @@ class CNN_RNN(nn.Module):
         # print('RNN output shape : {}'.format(RNN_output.shape))
 
         ### Dense layer for 6 DOF estimation ###
-        pose_est = self.linear(RNN_output)
+        pose_est = self.linear(RNN_output[:, -1, :])
         # print('Final output shape : {}'.format(pose_est.shape))
 
         return pose_est

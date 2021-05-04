@@ -37,22 +37,24 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-DATA_DISPLAY_ON = False
+DATA_DISPLAY_ON = True
 
 EPOCH = 100
 
-batch_size = 1
+batch_size = 4
+
+sequence_length = 5
 
 dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
                                     img_dataset_path=args['input_img_file_path'], 
                                     pose_dataset_path=args['input_pose_file_path'],
-                                    train_sequence=['00', '01', '02'], valid_sequence=['01'], test_sequence=['02'],
-                                    sequence_length=5,
+                                    train_sequence=['01'], valid_sequence=['01'], test_sequence=['02'],
+                                    sequence_length=sequence_length,
                                     train_transform=preprocess,
                                     valid_transform=preprocess,
                                     test_transform=preprocess,)
 
-dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True)
+dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True, collate_fn=dataset.collate_fn)
 
 CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
 CRNN_VO_model.train()
@@ -79,7 +81,7 @@ for epoch in range(EPOCH):
 
     for batch_idx, (current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
 
-        if (current_img_tensor != []) and (pose_6DOF_tensor != []):
+        if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
             current_img_tensor = current_img_tensor.to(device).float()
             pose_6DOF_tensor = pose_6DOF_tensor.to(device).float()
@@ -97,8 +99,8 @@ for epoch in range(EPOCH):
             translation_rotation_relative_weight = 100
 
             CRNN_VO_model.optimizer.zero_grad()
-            train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :, :3], pose_6DOF_tensor[:, :, :3]) \
-                        + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, :, 3:], pose_6DOF_tensor[:, :, 3:])
+            train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, -1, :3]) \
+                        + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, -1, 3:])
             train_loss.backward()
             CRNN_VO_model.optimizer.step()
 
@@ -129,3 +131,10 @@ for epoch in range(EPOCH):
 
                 cv.imshow('Image Sequence Stack', final_img_output)
                 cv.waitKey(1)
+
+    torch.save({
+        'epoch' : EPOCH,
+        'sequence_lenght' : sequence_length,
+        'CRNN_VO_model' : CRNN_VO_model.state_dict(),
+        'optimizer' : CRNN_VO_model.optimizer.state_dict(),
+    }, './' + start_time)
