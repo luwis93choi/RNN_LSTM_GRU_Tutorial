@@ -1,14 +1,18 @@
 # Reference : CNN + RNN - Concatenate time distributed CNN with LSTM (https://discuss.pytorch.org/t/solved-concatenate-time-distributed-cnn-with-lstm/15435/2)
 
 import os
+import sys
 import argparse
 import cv2 as cv
 import numpy as np
-from torch import device
+import time
 
 import torch
+from torch import device
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
+import torchvision
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 
@@ -33,9 +37,11 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+DATA_DISPLAY_ON = False
+
 EPOCH = 100
 
-batch_size = 4
+batch_size = 1
 
 dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
                                     img_dataset_path=args['input_img_file_path'], 
@@ -48,11 +54,29 @@ dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_pa
 
 dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True)
 
-CRNN_VO_model = CNN_RNN(device=device)
+CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
 CRNN_VO_model.train()
+
+start_time = str(time.time())
+
+writer = SummaryWriter(flush_secs=1)
+
+plot_step = 0
 
 dataloader.dataset.mode = 'training'
 for epoch in range(EPOCH):
+
+    print('[EPOCH : {}]'.format(str(epoch)))
+
+    immediate_loss_list = []
+    running_average_loss_list = []
+    running_average_loss_length = 20
+
+    if epoch == 0:
+        if os.path.exists('./' + start_time) == False:
+            print('Creating save directory')
+            os.mkdir('./' + start_time)
+
     for batch_idx, (current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
 
         if (current_img_tensor != []) and (pose_6DOF_tensor != []):
@@ -78,27 +102,30 @@ for epoch in range(EPOCH):
             train_loss.backward()
             CRNN_VO_model.optimizer.step()
 
-            print('[Total Loss : {}]'.format(train_loss.data))
+            writer.add_scalar('Immediate Loss', train_loss.data, plot_step)
+            plot_step += 1
 
-            ### Sequential Image Stack Display ###
-            disp_current_img_tensor = current_img_tensor.clone().detach().cpu()
+            if DATA_DISPLAY_ON is True:
 
-            img_sequence_list = []
-            total_img = []
-            seq_len = dataloader.dataset.sequence_length
-            for batch_index in range(disp_current_img_tensor.size(0)):
+                ### Sequential Image Stack Display ###
+                disp_current_img_tensor = current_img_tensor.clone().detach().cpu()
 
-                for seq in range(dataloader.dataset.sequence_length):
-                    current_img = np.array(TF.to_pil_image(disp_current_img_tensor[batch_index][seq]))
-                    current_img = cv.cvtColor(current_img, cv.COLOR_RGB2BGR)    # Re-Order the image array into BGR for display purpose
-                    current_img = cv.resize(current_img, dsize=(int(1280/seq_len), int(240/(seq_len * 0.5))), interpolation=cv.INTER_CUBIC)
-
-                    img_sequence_list.append(current_img)
-
-                total_img.append(cv.hconcat(img_sequence_list))
                 img_sequence_list = []
-            
-            final_img_output = cv.vconcat(total_img)
+                total_img = []
+                seq_len = dataloader.dataset.sequence_length
+                for batch_index in range(disp_current_img_tensor.size(0)):
 
-            cv.imshow('Image Sequence Stack', final_img_output)
-            cv.waitKey(1)
+                    for seq in range(dataloader.dataset.sequence_length):
+                        current_img = np.array(TF.to_pil_image(disp_current_img_tensor[batch_index][seq]))
+                        current_img = cv.cvtColor(current_img, cv.COLOR_RGB2BGR)    # Re-Order the image array into BGR for display purpose
+                        current_img = cv.resize(current_img, dsize=(int(1280/seq_len), int(240/(seq_len * 0.5))), interpolation=cv.INTER_CUBIC)
+
+                        img_sequence_list.append(current_img)
+
+                    total_img.append(cv.hconcat(img_sequence_list))
+                    img_sequence_list = []
+                
+                final_img_output = cv.vconcat(total_img)
+
+                cv.imshow('Image Sequence Stack', final_img_output)
+                cv.waitKey(1)
