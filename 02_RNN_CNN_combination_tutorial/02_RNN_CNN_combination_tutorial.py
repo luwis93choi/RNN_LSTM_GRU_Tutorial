@@ -28,7 +28,7 @@ ap.add_argument('-p', '--input_pose_file_path', type=str, required=True)
 
 args = vars(ap.parse_args())
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:2' if torch.cuda.is_available() else 'cpu')
 print(device)
 
 preprocess = transforms.Compose([
@@ -37,24 +37,26 @@ preprocess = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-DATA_DISPLAY_ON = True
+DATA_DISPLAY_ON = False
 
 EPOCH = 100
 
-batch_size = 4
+batch_size = 16
 
 sequence_length = 5
 
 dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
                                     img_dataset_path=args['input_img_file_path'], 
                                     pose_dataset_path=args['input_pose_file_path'],
-                                    train_sequence=['01'], valid_sequence=['01'], test_sequence=['02'],
+                                    train_sequence=['00', '02', '04', '06', '08', '10'], 
+                                    valid_sequence=['01'], 
+                                    test_sequence=['02'],
                                     sequence_length=sequence_length,
                                     train_transform=preprocess,
                                     valid_transform=preprocess,
                                     test_transform=preprocess,)
 
-dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=True, collate_fn=dataset.collate_fn)
+dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True, collate_fn=dataset.collate_fn)
 
 CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
 CRNN_VO_model.train()
@@ -104,7 +106,7 @@ for epoch in range(EPOCH):
             train_loss.backward()
             CRNN_VO_model.optimizer.step()
 
-            writer.add_scalar('Immediate Loss', train_loss.data, plot_step)
+            writer.add_scalar('Immediate Loss at Epoch {}/{}'.format(epoch, EPOCH), train_loss.item(), plot_step)
             plot_step += 1
 
             if DATA_DISPLAY_ON is True:
@@ -137,4 +139,4 @@ for epoch in range(EPOCH):
         'sequence_lenght' : sequence_length,
         'CRNN_VO_model' : CRNN_VO_model.state_dict(),
         'optimizer' : CRNN_VO_model.optimizer.state_dict(),
-    }, './' + start_time)
+    }, './' + start_time + '/CRNN_VO_model.pth')
