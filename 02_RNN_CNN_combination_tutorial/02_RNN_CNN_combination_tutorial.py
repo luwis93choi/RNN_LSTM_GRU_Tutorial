@@ -20,6 +20,17 @@ from sequential_sensor_dataset import sequential_sensor_dataset
 
 from CNN_RNN import CNN_RNN
 
+# Argument parser boolean processing (https://eehoeskrap.tistory.com/521)
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    if value.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif value.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected')
+
 ap = argparse.ArgumentParser()
 
 ap.add_argument('-l', '--input_lidar_file_path', type=str, required=True)
@@ -31,7 +42,7 @@ ap.add_argument('-c', '--cuda_num', type=str, required=True)
 ap.add_argument('-e', '--training_epoch', type=int, required=False, default=100)
 ap.add_argument('-b', '--batch_size', type=int, required=False, default=16)
 ap.add_argument('-s', '--sequence_length', type=int, required=False, default=5)
-ap.add_argument('-d', '--data_display', type=str, required=False, default=False)
+ap.add_argument('-d', '--data_display', type=str2bool, required=False, default=False)
 
 ap.add_argument('-m', '--execution_mode', type=str, required=True, default='training')
 ap.add_argument('-t', '--pre_trained_network_path', type=str, required=True)
