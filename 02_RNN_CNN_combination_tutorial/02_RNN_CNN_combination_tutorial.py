@@ -82,6 +82,7 @@ if mode == 'training':
     CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
     CRNN_VO_model.train()
 
+    # Tensorboard run command : tensorboard --logdir=./runs
     training_writer = SummaryWriter(log_dir='./runs/' + start_time + '/CRNN_VO_training', flush_secs=1)
     validation_writer = SummaryWriter(log_dir='./runs/' + start_time + '/CRNN_VO_validation', flush_secs=1)
 
