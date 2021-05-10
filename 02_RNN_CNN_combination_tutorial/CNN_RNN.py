@@ -9,7 +9,7 @@ import numpy as np
 
 class CNN_RNN(nn.Module):
 
-    def __init__(self, device, hidden_size=100, num_layers=2, learning_rate=0.0001):
+    def __init__(self, device, rnn_type='lstm', bidirection='False', hidden_size=100, num_layers=2, learning_rate=0.0001):
 
         super(CNN_RNN, self).__init__()
 
@@ -56,7 +56,13 @@ class CNN_RNN(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
 
-        self.RNN = nn.RNN(input_size=30720, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+        self.rnn_type = rnn_type
+
+        if rnn_type == 'rnn':
+            self.RNN = nn.RNN(input_size=30720, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+
+        elif rnn_type == 'lstm':
+            self.RNN = nn.LSTM(input_size=30720, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
 
         self.linear = nn.Linear(in_features=hidden_size, out_features=6)
 
@@ -90,7 +96,13 @@ class CNN_RNN(nn.Module):
         ### Training with RNN elements ###
         h0 = torch.zeros(self.num_layers, CNN_output.size(0), self.hidden_size).to(self.device)
 
-        RNN_output, _ = self.RNN(CNN_output, h0)
+        if self.rnn_type == 'rnn':            
+            RNN_output, _ = self.RNN(CNN_output, h0)
+
+        elif self.rnn_type == 'lstm':
+            c0 = torch.zeros(self.num_layers, CNN_output.size(0), self.hidden_size).to(self.device)
+            RNN_output, _ = self.RNN(CNN_output, (h0, c0))
+
         # print('RNN output shape : {}'.format(RNN_output.shape))
 
         ### Dense layer for 6 DOF estimation ###
