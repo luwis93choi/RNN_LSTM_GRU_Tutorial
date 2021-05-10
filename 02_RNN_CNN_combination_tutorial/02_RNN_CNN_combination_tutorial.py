@@ -106,7 +106,7 @@ for epoch in range(EPOCH):
             train_loss.backward()
             CRNN_VO_model.optimizer.step()
 
-            writer.add_scalar('Immediate Loss at Epoch {}/{}'.format(epoch, EPOCH), train_loss.item(), plot_step)
+            writer.add_scalar('Immediate Loss (Translation + Rotation)'.format(epoch, EPOCH), train_loss.item(), plot_step)
             plot_step += 1
 
             if DATA_DISPLAY_ON is True:
