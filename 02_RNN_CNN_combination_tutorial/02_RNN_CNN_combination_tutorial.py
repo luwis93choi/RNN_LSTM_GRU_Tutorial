@@ -85,7 +85,7 @@ start_time = str(datetime.datetime.now())
 
 if mode == 'training':
 
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=8, drop_last=True, collate_fn=dataset.collate_fn)
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=8, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
 
     print('Mode : Training')
     print('Training Epoch : ' + str(EPOCH))
