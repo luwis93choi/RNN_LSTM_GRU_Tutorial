@@ -151,7 +151,7 @@ if mode == 'training':
                 train_loss.backward()
                 CRNN_VO_model.optimizer.step()
 
-                training_writer.add_scalar('Immediate Loss (Translation + Rotation)', train_loss.item(), plot_step_training)
+                training_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(batch_size, sequence_length), train_loss.item(), plot_step_training)
                 plot_step_training += 1
 
 
@@ -212,7 +212,7 @@ if mode == 'training':
                     train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, -1, :3]) \
                                 + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, -1, 3:])
 
-                    validation_writer.add_scalar('Immediate Loss (Translation + Rotation)', train_loss.item(), plot_step_validation)
+                    validation_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(batch_size, sequence_length), train_loss.item(), plot_step_validation)
                     plot_step_validation += 1
 
         # torch_profiler.step()
