@@ -75,7 +75,7 @@ dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_pa
                                     pose_dataset_path=args['input_pose_file_path'],
                                     train_sequence=['00', '02', '04', '06', '08', '10'], 
                                     valid_sequence=['01', '03', '05', '07', '09'], 
-                                    test_sequence=['02'],
+                                    test_sequence=['01', '03', '05', '07', '09'],
                                     sequence_length=sequence_length,
                                     train_transform=preprocess,
                                     valid_transform=preprocess,
@@ -146,8 +146,8 @@ if mode == 'training':
                 translation_rotation_relative_weight = 100
 
                 CRNN_VO_model.optimizer.zero_grad()
-                train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, -1, :3]) \
-                            + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, -1, 3:])
+                train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3]) \
+                            + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, 3:])
                 train_loss.backward()
                 CRNN_VO_model.optimizer.step()
 
@@ -209,8 +209,8 @@ if mode == 'training':
 
                     translation_rotation_relative_weight = 100
 
-                    train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, -1, :3]) \
-                                + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, -1, 3:])
+                    train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3]) \
+                                + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, 3:])
 
                     validation_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(batch_size, sequence_length), train_loss.item(), plot_step_validation)
                     plot_step_validation += 1
@@ -226,10 +226,12 @@ if mode == 'training':
 
 elif mode == 'test':
 
-    dataloader = DataLoader(dataset=dataset, batch_size=1, shuffle=True, num_workers=4, drop_last=True, collate_fn=dataset.collate_fn)
+    test_batch_size = 1
+
+    dataloader = DataLoader(dataset=dataset, batch_size=test_batch_size, shuffle=False, num_workers=4, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
 
     print('Mode : Test')
-    print('Batch Size : ' + str(1))
+    print('Batch Size : ' + str(test_batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
     CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
@@ -248,6 +250,8 @@ elif mode == 'test':
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
+                print('Current State [Test] - [Batch Idx : {}]'.format(str(batch_idx)))
+
                 current_img_tensor = current_img_tensor.to(device).float()
                 pose_6DOF_tensor = pose_6DOF_tensor.to(device).float()
 
@@ -263,8 +267,8 @@ elif mode == 'test':
 
                 translation_rotation_relative_weight = 100
 
-                train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, -1, :3]) \
-                            + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, -1, 3:])
+                test_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3]) \
+                            + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, 3:])
 
-                test_writer.add_scalar('Immediate Loss (Translation + Rotation)', train_loss.item(), plot_step_test)
+                test_writer.add_scalar('[Test] Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(test_batch_size, sequence_length), test_loss.item(), plot_step_test)
                 plot_step_test += 1
