@@ -2,6 +2,7 @@ import os
 import os.path
 import numpy as np
 import csv
+from numpy.lib.shape_base import dsplit
 
 import torch
 import torch.utils.data
@@ -79,22 +80,22 @@ class seq_dataset_dict_generator():
                 pose_file.close()
 
                 # Iterate over each data in the sequence
-                for idx, (img_name, line) in enumerate(zip(np.array(img_data_name), np.array(lines))):
+                for idx in range(len(img_data_name)):
                 
                     if idx < sequence_length:
                         pass
                     
                     else:
-
-                        # Pose data re-organization into x, y, z, euler angles
-                        pose_line = line
-                        pose = pose_line.strip().split()
                         
-                        current_pose_T = [float(pose[3]), float(pose[7]), float(pose[11])]
+                        # Latest Pose Retrieval : Pose data re-organization into x, y, z, euler angles
+                        current_pose_line = lines[idx]
+                        current_pose = current_pose_line.strip().split()
+
+                        current_pose_T = [float(current_pose[3]), float(current_pose[7]), float(current_pose[11])]
                         current_pose_Rmat = np.array([
-                                                    [float(pose[0]), float(pose[1]), float(pose[2])],
-                                                    [float(pose[4]), float(pose[5]), float(pose[6])],
-                                                    [float(pose[8]), float(pose[9]), float(pose[10])]
+                                                    [float(current_pose[0]), float(current_pose[1]), float(current_pose[2])],
+                                                    [float(current_pose[4]), float(current_pose[5]), float(current_pose[6])],
+                                                    [float(current_pose[8]), float(current_pose[9]), float(current_pose[10])]
                                                     ])
 
                         current_x = current_pose_T[0]
@@ -105,11 +106,39 @@ class seq_dataset_dict_generator():
                         current_pitch = np.arctan2(-1 * current_pose_Rmat[2][0], np.sqrt(current_pose_Rmat[2][1]**2 + current_pose_Rmat[2][2]**2))
                         current_yaw = np.arctan2(current_pose_Rmat[1][0], current_pose_Rmat[0][0])
 
+                        # Prev Pose Retrieval : Pose data re-organization into x, y, z, euler angles
+                        prev_pose_line = lines[idx-1]
+                        prev_pose = prev_pose_line.strip().split()
+
+                        prev_pose_T = [float(prev_pose[3]), float(prev_pose[7]), float(prev_pose[11])]
+                        prev_pose_Rmat = np.array([
+                                                    [float(prev_pose[0]), float(prev_pose[1]), float(prev_pose[2])],
+                                                    [float(prev_pose[4]), float(prev_pose[5]), float(prev_pose[6])],
+                                                    [float(prev_pose[8]), float(prev_pose[9]), float(prev_pose[10])]
+                                                    ])
+
+                        prev_x = prev_pose_T[0]
+                        prev_y = prev_pose_T[1]
+                        prev_z = prev_pose_T[2]
+
+                        prev_roll = np.arctan2(prev_pose_Rmat[2][1], prev_pose_Rmat[2][2])
+                        prev_pitch = np.arctan2(-1 * prev_pose_Rmat[2][0], np.sqrt(prev_pose_Rmat[2][1]**2 + prev_pose_Rmat[2][2]**2))
+                        prev_yaw = np.arctan2(prev_pose_Rmat[1][0], prev_pose_Rmat[0][0])
+
+                        # Pose Change Calculation
+                        dx = current_x - prev_x
+                        dy = current_y - prev_y
+                        dz = current_z - prev_z
+
+                        droll = current_roll - prev_roll
+                        dpitch = current_pitch - prev_pitch
+                        dyaw = current_yaw - prev_yaw
+
                         idx_list = [self.data_idx, sequence_idx]
                         seq_img_path_list = []
                         for idx_offset in reversed(range(sequence_length)):
                             seq_img_path_list.append(img_base_path + '/' + img_data_name[idx - idx_offset])
-                        pose_list = [current_x, current_y, current_z, current_roll, current_pitch, current_yaw]
+                        pose_list = [dx, dy, dz, droll, dpitch, dyaw]
 
                         data = idx_list + seq_img_path_list + pose_list
 
@@ -209,6 +238,8 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
         elif self.mode == 'test':
             item = self.test_data_list[index]
         
+        current_seq = item[1]
+
         ### Sequential Image Stacking ###
         for idx in range(self.sequence_length):
 
@@ -231,10 +262,11 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
         
         img_stack = torch.from_numpy(img_stack)
 
+        ### 6DOF Pose Data Loading ###
         pose_6DOF = [float(i) for i in item[2 + self.sequence_length:]]
         pose_stack = torch.from_numpy(np.array(pose_6DOF))
 
-        return img_stack, pose_stack
+        return current_seq, img_stack, pose_stack
 
     def __len__(self):
 
