@@ -6,6 +6,7 @@ import argparse
 import cv2 as cv
 import numpy as np
 import datetime
+from numpy.core.shape_base import block
 
 import torch
 from torch import device
@@ -19,6 +20,10 @@ import torchvision.transforms.functional as TF
 from sequential_sensor_dataset import sequential_sensor_dataset
 
 from CNN_RNN import CNN_RNN
+
+
+import matplotlib.pyplot as plt
+
 
 os.environ['KMP_WARNINGS'] = 'off'
 
@@ -75,7 +80,7 @@ dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_pa
                                     pose_dataset_path=args['input_pose_file_path'],
                                     train_sequence=['00', '02', '04', '06', '08', '10'], 
                                     valid_sequence=['01', '03', '05', '07', '09'], 
-                                    test_sequence=['01', '03', '05', '07', '09'],
+                                    test_sequence=['00'],
                                     sequence_length=sequence_length,
                                     train_transform=preprocess,
                                     valid_transform=preprocess,
@@ -124,7 +129,7 @@ if mode == 'training':
                 print('Creating save directory')
                 os.mkdir('./' + start_time)
 
-        for batch_idx, (current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
 
             print('Current State [Training] - [EPOCH : {}][Batch Idx : {}]'.format(str(epoch), str(batch_idx)))
 
@@ -188,7 +193,7 @@ if mode == 'training':
 
         with torch.no_grad():
 
-            for batch_idx, (current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
+            for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
 
                 print('Current State [Validation] - [EPOCH : {}][Batch Idx : {}]'.format(str(epoch), str(batch_idx)))
 
@@ -244,9 +249,15 @@ elif mode == 'test':
     test_writer = SummaryWriter(log_dir='./runs/' + start_time + '/CRNN_VO_test', flush_secs=1)
     plot_step_test = 0
 
+    current_seq_num = 0
+    prev_seq_num = 0
+
+    path_x = 0
+    path_z = 0
+
     with torch.no_grad():
 
-        for batch_idx, (current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
@@ -272,3 +283,28 @@ elif mode == 'test':
 
                 test_writer.add_scalar('[Test] Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(test_batch_size, sequence_length), test_loss.item(), plot_step_test)
                 plot_step_test += 1
+
+
+                current_seq_num = current_seq
+
+                # Detect sequence change for reset plotting
+                if (batch_idx != 0) and (current_seq_num != prev_seq_num):
+
+                    plt.cla()
+
+                else:
+
+                    temp = pose_est_output.cpu().numpy()
+
+                    print(temp)
+
+                    path_x += temp[:, 0]
+                    path_z += temp[:, 2]
+
+                    plt.scatter(path_x, path_z)
+                    plt.pause(0.0001)
+                    plt.show(block=False)
+
+                plt.show(block=False)
+
+                prev_seq_num = current_seq_num
