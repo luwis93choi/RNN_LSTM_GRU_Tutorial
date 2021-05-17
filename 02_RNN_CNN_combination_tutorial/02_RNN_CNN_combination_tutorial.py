@@ -97,7 +97,7 @@ if mode == 'training':
     print('Batch Size : ' + str(batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
+    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.0001)
     CRNN_VO_model.train()
 
     # Tensorboard run command : tensorboard --logdir=./runs
@@ -239,7 +239,7 @@ elif mode == 'test':
     print('Batch Size : ' + str(test_batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=500, learning_rate=0.001)
+    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.0001)
     CRNN_VO_model.load_state_dict(torch.load(args['pre_trained_network_path'], map_location='cuda:' + args['cuda_num'])['CRNN_VO_model'])
     CRNN_VO_model.eval()
 
