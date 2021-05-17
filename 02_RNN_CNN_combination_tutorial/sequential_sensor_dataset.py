@@ -82,9 +82,11 @@ class seq_dataset_dict_generator():
                 # Iterate over each data in the sequence
                 for idx in range(len(img_data_name)):
                 
+                    # If current index is lower than sequence length, skip
                     if idx < sequence_length:
                         pass
                     
+                    # If current index is higher than sequence length, accumulate file path into dataset table
                     else:
                         
                         # Latest Pose Retrieval : Pose data re-organization into x, y, z, euler angles
@@ -263,7 +265,7 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
         
         img_stack = torch.from_numpy(img_stack)
         
-        ### 6DOF Pose Data Loading ###
+        ### Last Time Step 6DOF Pose Data Loading ###
         pose_6DOF = [float(i) for i in item[2 + self.sequence_length:]]
         pose_stack = torch.from_numpy(np.array(pose_6DOF))
 
