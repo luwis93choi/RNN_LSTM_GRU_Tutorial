@@ -134,6 +134,7 @@ class seq_dataset_dict_generator():
                         dpitch = current_pitch - prev_pitch
                         dyaw = current_yaw - prev_yaw
 
+                        # Accumulate data to form dataset table
                         idx_list = [self.data_idx, sequence_idx]
                         seq_img_path_list = []
                         for idx_offset in reversed(range(sequence_length)):
@@ -261,7 +262,7 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
                 img_stack = np.vstack((img_stack, current_img))     # Stack the sequence of Camera Images
         
         img_stack = torch.from_numpy(img_stack)
-
+        
         ### 6DOF Pose Data Loading ###
         pose_6DOF = [float(i) for i in item[2 + self.sequence_length:]]
         pose_stack = torch.from_numpy(np.array(pose_6DOF))
