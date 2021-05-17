@@ -67,13 +67,13 @@ class CNN_RNN(nn.Module):
         self.linear = nn.Linear(in_features=hidden_size, out_features=6)
 
         ### Training Setup ###
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+        self.device = device
+        self.to(self.device)
+        
+        self.optimizer = optim.Adagrad(self.parameters(), lr=learning_rate)
 
         self.translation_loss = nn.MSELoss()
         self.rotation_loss = nn.MSELoss()
-
-        self.device = device
-        self.to(self.device)
 
     def forward(self, x):
 
