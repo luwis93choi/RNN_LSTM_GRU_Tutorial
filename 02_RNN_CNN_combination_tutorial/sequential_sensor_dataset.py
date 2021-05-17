@@ -11,10 +11,11 @@ from torchvision import transforms
 import PIL
 from PIL import Image
 
-class dataset_dict_generator():
+class seq_dataset_dict_generator():
 
     def __init__(self, lidar_dataset_path='', img_dataset_path='', pose_dataset_path='',
-                       train_sequence=['00'], valid_sequence=['01'], test_sequence=['02']):
+                       train_sequence=['00'], valid_sequence=['01'], test_sequence=['02'],
+                       sequence_length=1):
 
         self.lidar_dataset_path = lidar_dataset_path
         self.img_dataset_path = img_dataset_path
@@ -30,6 +31,8 @@ class dataset_dict_generator():
         self.train_len = 0
         self.valid_len = 0
         self.test_len = 0
+
+        self.sequence_length = sequence_length
 
         ######################################
         ### Dataset Dictionary Preparation ###
@@ -50,9 +53,17 @@ class dataset_dict_generator():
 
             self.dataset_writer = csv.writer(self.dataset_dict)
 
-            header_list = ['current_index', 'Sequence_index', 'current_img_path', 'current_x [m]', 'current_y [m]', 'current_z [m]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
+            header_idx_list = ['current_index', 'Sequence_index']
+            header_seq_data_list = []
+            for i in range(sequence_length):
+                header_seq_data_list.append('Img [{}] Path'.format(i))
+            header_unit_list = ['current_x [m]', 'current_y [m]', 'current_z [m]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
+            
+            header_list = header_idx_list + header_seq_data_list + header_unit_list
+            
             self.dataset_writer.writerow(header_list)
 
+            # Iterate over each dataset sequence
             for sequence_idx in np.array(dataset_type):
                 
                 img_base_path = self.img_dataset_path + '/' + sequence_idx + '/image_2'
@@ -67,32 +78,44 @@ class dataset_dict_generator():
                     if not line: break
                 pose_file.close()
 
-                for img_name, line in zip(np.array(img_data_name), np.array(lines)):
+                # Iterate over each data in the sequence
+                for idx, (img_name, line) in enumerate(zip(np.array(img_data_name), np.array(lines))):
+                
+                    if idx < sequence_length:
+                        pass
                     
-                    # Pose data re-organization into x, y, z, euler angles
-                    pose_line = line
-                    pose = pose_line.strip().split()
-                    
-                    current_pose_T = [float(pose[3]), float(pose[7]), float(pose[11])]
-                    current_pose_Rmat = np.array([
-                                                [float(pose[0]), float(pose[1]), float(pose[2])],
-                                                [float(pose[4]), float(pose[5]), float(pose[6])],
-                                                [float(pose[8]), float(pose[9]), float(pose[10])]
-                                                ])
+                    else:
 
-                    current_x = current_pose_T[0]
-                    current_y = current_pose_T[1]
-                    current_z = current_pose_T[2]
+                        # Pose data re-organization into x, y, z, euler angles
+                        pose_line = line
+                        pose = pose_line.strip().split()
+                        
+                        current_pose_T = [float(pose[3]), float(pose[7]), float(pose[11])]
+                        current_pose_Rmat = np.array([
+                                                    [float(pose[0]), float(pose[1]), float(pose[2])],
+                                                    [float(pose[4]), float(pose[5]), float(pose[6])],
+                                                    [float(pose[8]), float(pose[9]), float(pose[10])]
+                                                    ])
 
-                    current_roll = np.arctan2(current_pose_Rmat[2][1], current_pose_Rmat[2][2])
-                    current_pitch = np.arctan2(-1 * current_pose_Rmat[2][0], np.sqrt(current_pose_Rmat[2][1]**2 + current_pose_Rmat[2][2]**2))
-                    current_yaw = np.arctan2(current_pose_Rmat[1][0], current_pose_Rmat[0][0])
+                        current_x = current_pose_T[0]
+                        current_y = current_pose_T[1]
+                        current_z = current_pose_T[2]
 
-                    data = [self.data_idx, sequence_idx, img_base_path + '/' + img_name, current_x, current_y, current_z, current_roll, current_pitch, current_yaw]
+                        current_roll = np.arctan2(current_pose_Rmat[2][1], current_pose_Rmat[2][2])
+                        current_pitch = np.arctan2(-1 * current_pose_Rmat[2][0], np.sqrt(current_pose_Rmat[2][1]**2 + current_pose_Rmat[2][2]**2))
+                        current_yaw = np.arctan2(current_pose_Rmat[1][0], current_pose_Rmat[0][0])
 
-                    self.dataset_writer.writerow(data)
+                        idx_list = [self.data_idx, sequence_idx]
+                        seq_img_path_list = []
+                        for idx_offset in reversed(range(sequence_length)):
+                            seq_img_path_list.append(img_base_path + '/' + img_data_name[idx - idx_offset])
+                        pose_list = [current_x, current_y, current_z, current_roll, current_pitch, current_yaw]
 
-                    self.data_idx += 1
+                        data = idx_list + seq_img_path_list + pose_list
+
+                        self.dataset_writer.writerow(data)
+
+                        self.data_idx += 1
 
             if dataset_dict_idx == 0:
                 self.train_len = self.data_idx
@@ -138,10 +161,11 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
 
         self.sequence_length = sequence_length
 
-        self.dataset_dict_generator = dataset_dict_generator(lidar_dataset_path=lidar_dataset_path, 
-                                                             img_dataset_path=img_dataset_path, 
-                                                             pose_dataset_path=pose_dataset_path,
-                                                             train_sequence=train_sequence, valid_sequence=valid_sequence, test_sequence=test_sequence)
+        self.dataset_dict_generator = seq_dataset_dict_generator(lidar_dataset_path=lidar_dataset_path, 
+                                                                 img_dataset_path=img_dataset_path, 
+                                                                 pose_dataset_path=pose_dataset_path,
+                                                                 train_sequence=train_sequence, valid_sequence=valid_sequence, test_sequence=test_sequence,
+                                                                 sequence_length=self.sequence_length)
 
         self.train_data_list = []
         train_dataset_dict = open(self.dataset_dict_generator.train_dataset_dict_path, 'r', encoding='utf-8')
@@ -176,77 +200,50 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
 
-        if index < self.sequence_length:
+        if self.mode == 'training':
+            item = self.train_data_list[index]
 
-            print('[Exception Skip] Data length lower than RNN sequence length')
+        elif self.mode == 'validation':
+            item = self.valid_data_list[index]
 
-            return None     # Invalid data exception handing with collate_fn
+        elif self.mode == 'test':
+            item = self.test_data_list[index]
+        
+        ### Sequential Image Stacking ###
+        for idx in range(self.sequence_length):
 
-        else:
             if self.mode == 'training':
-                item = self.train_data_list[index : index + self.sequence_length]
+                current_img = self.train_transform(Image.open(item[2 + idx]))
 
             elif self.mode == 'validation':
-                item = self.valid_data_list[index : index + self.sequence_length]
+                current_img = self.valid_transform(Image.open(item[2 + idx]))
 
             elif self.mode == 'test':
-                item = self.test_data_list[index : index + self.sequence_length]
+                current_img = self.test_transform(Image.open(item[2 + idx]))
 
-            seq_indices = np.array(item)[:, 1]
-
-            if(len(np.unique(seq_indices)) == 1):
-
-                ### Sequential Image Stacking ###
-                for idx in range(self.sequence_length):
-
-                    if self.mode == 'training':
-                        current_img = self.train_transform(Image.open(item[idx][2]))
-
-                    elif self.mode == 'validation':
-                        current_img = self.valid_transform(Image.open(item[idx][2]))
-
-                    elif self.mode == 'test':
-                        current_img = self.test_transform(Image.open(item[idx][2]))
-
-                    current_img = np.expand_dims(current_img, axis=0)       # Add Sequence Length Dimension
-                    # current_img = np.transpose(current_img, (0, 3, 1, 2))   # Re-Order the array into Channel-First Array
-                    
-                    if idx == 0:
-                        img_stack = current_img
-                    else:
-                        img_stack = np.vstack((img_stack, current_img))     # Stack the sequence of Camera Images
-                
-                img_stack = torch.from_numpy(img_stack)
-
-                ### Sequential Pose Data Stacking ###
-                for idx in range(self.sequence_length):
-
-                    pose_6DOF = [float(i) for i in item[idx][3:]]
-                    pose_6DOF = np.expand_dims(pose_6DOF, axis=0)   # Add Sequence Length Dimension
-                    
-                    if idx == 0:
-                        pose_stack = pose_6DOF
-                    else:
-                        pose_stack = np.vstack((pose_stack, pose_6DOF))     # Stack the sequence of Pose Data
-
-                pose_stack = torch.from_numpy(pose_stack)
-
-                return img_stack, pose_stack
-
+            current_img = np.expand_dims(current_img, axis=0)       # Add Sequence Length Dimension
+            # current_img = np.transpose(current_img, (0, 3, 1, 2))   # Re-Order the array into Channel-First Array
+            
+            if idx == 0:
+                img_stack = current_img
             else:
+                img_stack = np.vstack((img_stack, current_img))     # Stack the sequence of Camera Images
+        
+        img_stack = torch.from_numpy(img_stack)
 
-                print('[Exception Skip] Training sequence transition')
+        pose_6DOF = [float(i) for i in item[2 + self.sequence_length:]]
+        pose_stack = torch.from_numpy(np.array(pose_6DOF))
 
-                return None     # Invalid data exception handing with collate_fn
+        return img_stack, pose_stack
 
     def __len__(self):
 
         if self.mode == 'training':
-            return self.dataset_dict_generator.train_len - self.sequence_length
+            return self.dataset_dict_generator.train_len - 1
 
         elif self.mode == 'validation':
-            return self.dataset_dict_generator.valid_len - self.sequence_length
+            return self.dataset_dict_generator.valid_len - 1
 
         elif self.mode == 'test':
-            return self.dataset_dict_generator.test_len - self.sequence_length
+            return self.dataset_dict_generator.test_len - 1
 
