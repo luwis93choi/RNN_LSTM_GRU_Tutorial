@@ -21,9 +21,9 @@ from sequential_sensor_dataset import sequential_sensor_dataset
 
 from CNN_RNN import CNN_RNN
 
-
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
 
 os.environ['KMP_WARNINGS'] = 'off'
 
@@ -80,7 +80,7 @@ dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_pa
                                     pose_dataset_path=args['input_pose_file_path'],
                                     train_sequence=['00', '02', '04', '06', '08', '10'], 
                                     valid_sequence=['01', '03', '05', '07', '09'], 
-                                    test_sequence=['00'],
+                                    test_sequence=['01'],
                                     sequence_length=sequence_length,
                                     train_transform=preprocess,
                                     valid_transform=preprocess,
@@ -90,14 +90,16 @@ start_time = str(datetime.datetime.now())
 
 if mode == 'training':
 
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=8, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
+    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True, num_workers=10, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
 
     print('Mode : Training')
     print('Training Epoch : ' + str(EPOCH))
     print('Batch Size : ' + str(batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.0001)
+    train_learning_rate = 0.001
+
+    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=train_learning_rate)
     CRNN_VO_model.train()
 
     # Tensorboard run command : tensorboard --logdir=./runs
@@ -129,9 +131,9 @@ if mode == 'training':
                 print('Creating save directory')
                 os.mkdir('./' + start_time)
 
-        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
+        print('Current State [Training] - [EPOCH : {}]'.format(str(epoch)))
 
-            print('Current State [Training] - [EPOCH : {}][Batch Idx : {}]'.format(str(epoch), str(batch_idx)))
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
@@ -156,7 +158,7 @@ if mode == 'training':
                 train_loss.backward()
                 CRNN_VO_model.optimizer.step()
 
-                training_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(batch_size, sequence_length), train_loss.item(), plot_step_training)
+                training_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {} | Learning Rate : {} | Optimizer : {}'.format(batch_size, sequence_length, train_learning_rate, type(CRNN_VO_model.optimizer)), train_loss.item(), plot_step_training)
                 plot_step_training += 1
 
 
@@ -191,11 +193,11 @@ if mode == 'training':
         dataloader.dataset.mode = 'validation'
         CRNN_VO_model.eval()
 
+        print('Current State [Validation] - [EPOCH : {}]'.format(str(epoch)))
+
         with torch.no_grad():
 
-            for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
-
-                print('Current State [Validation] - [EPOCH : {}][Batch Idx : {}]'.format(str(epoch), str(batch_idx)))
+            for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
 
                 if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
@@ -217,7 +219,7 @@ if mode == 'training':
                     train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3]) \
                                 + translation_rotation_relative_weight * CRNN_VO_model.rotation_loss(pose_est_output[:, 3:], pose_6DOF_tensor[:, 3:])
 
-                    validation_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(batch_size, sequence_length), train_loss.item(), plot_step_validation)
+                    validation_writer.add_scalar('Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {} | Learning Rate : {} | Optimizer : {}'.format(batch_size, sequence_length, train_learning_rate, type(CRNN_VO_model.optimizer)), train_loss.item(), plot_step_validation)
                     plot_step_validation += 1
 
         # torch_profiler.step()
@@ -231,7 +233,7 @@ if mode == 'training':
 
 elif mode == 'test':
 
-    test_batch_size = 1
+    test_batch_size = 8
 
     dataloader = DataLoader(dataset=dataset, batch_size=test_batch_size, shuffle=False, num_workers=4, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
 
@@ -239,7 +241,7 @@ elif mode == 'test':
     print('Batch Size : ' + str(test_batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.0001)
+    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.001)
     CRNN_VO_model.load_state_dict(torch.load(args['pre_trained_network_path'], map_location='cuda:' + args['cuda_num'])['CRNN_VO_model'])
     CRNN_VO_model.eval()
 
@@ -255,13 +257,19 @@ elif mode == 'test':
     path_x = 0
     path_z = 0
 
+    groundtruth_x = 0
+    groundtruth_z = 0
+
+    vo_est_file = open('./CRNN_VO_est.txt', 'w')
+    vo_groundtruth_file = open('./CRNN_groundtruth.txt', 'w')
+
     with torch.no_grad():
 
-        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(dataloader):
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
-                print('Current State [Test] - [Batch Idx : {}]'.format(str(batch_idx)))
+                # print('Current State [Test] - [Batch Idx : {}]'.format(str(batch_idx)))
 
                 current_img_tensor = current_img_tensor.to(device).float()
                 pose_6DOF_tensor = pose_6DOF_tensor.to(device).float()
@@ -284,27 +292,47 @@ elif mode == 'test':
                 test_writer.add_scalar('[Test] Immediate Loss (Translation + Rotation) | Batch Size : {} | Sequence Length : {}'.format(test_batch_size, sequence_length), test_loss.item(), plot_step_test)
                 plot_step_test += 1
 
-
                 current_seq_num = current_seq
 
                 # Detect sequence change for reset plotting
                 if (batch_idx != 0) and (current_seq_num != prev_seq_num):
 
-                    plt.cla()
+                    pass
 
                 else:
 
-                    temp = pose_est_output.cpu().numpy()
+                    VO_est = pose_est_output.cpu().numpy()
+                    VO_groundtruth = pose_6DOF_tensor.cpu().numpy()
+                    
+                    trajectory_x_est = []
+                    trajectory_z_est = []
+                    
+                    trajectory_x_truth = []
+                    trajectory_z_truth = []
 
-                    print(temp)
+                    for i in range(len(VO_est)):
 
-                    path_x += temp[:, 0]
-                    path_z += temp[:, 2]
+                        path_x += VO_est[:, 0][i]
+                        trajectory_x_est.append(path_x)
 
-                    plt.scatter(path_x, path_z)
-                    plt.pause(0.0001)
-                    plt.show(block=False)
+                        path_z += VO_est[:, 2][i]
+                        trajectory_z_est.append(path_z)
 
-                plt.show(block=False)
+                    path_x = trajectory_x_est[-1]
+                    path_z = trajectory_z_est[-1]
+
+                    for i in range(len(VO_groundtruth)):
+
+                        groundtruth_x += VO_groundtruth[:, 0][i]
+                        trajectory_x_truth.append(groundtruth_x)
+
+                        groundtruth_z += VO_groundtruth[:, 2][i]
+                        trajectory_z_truth.append(groundtruth_z)
+
+                    groundtruth_x = trajectory_x_truth[-1]
+                    groundtruth_z = trajectory_z_truth[-1]
+
+                    np.savetxt(vo_est_file, np.dstack((np.array(trajectory_x_est), np.array(trajectory_z_est)))[0])
+                    np.savetxt(vo_groundtruth_file, np.dstack((np.array(trajectory_x_truth), np.array(trajectory_z_truth)))[0])
 
                 prev_seq_num = current_seq_num
