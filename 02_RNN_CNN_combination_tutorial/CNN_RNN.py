@@ -70,7 +70,7 @@ class CNN_RNN(nn.Module):
         self.device = device
         self.to(self.device)
         
-        self.optimizer = optim.Adagrad(self.parameters(), lr=learning_rate)
+        self.optimizer = optim.RMSprop(self.parameters(), lr=learning_rate)
 
         self.translation_loss = nn.MSELoss()
         self.rotation_loss = nn.MSELoss()
