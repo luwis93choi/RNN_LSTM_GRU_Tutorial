@@ -58,7 +58,7 @@ class seq_dataset_dict_generator():
             header_seq_data_list = []
             for i in range(sequence_length):
                 header_seq_data_list.append('Img [{}] Path'.format(i))
-            header_unit_list = ['current_x [m]', 'current_y [m]', 'current_z [m]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
+            header_unit_list = ['current_x [cm]', 'current_y [cm]', 'current_z [cm]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
             
             header_list = header_idx_list + header_seq_data_list + header_unit_list
             
@@ -128,9 +128,9 @@ class seq_dataset_dict_generator():
                         prev_yaw = np.arctan2(prev_pose_Rmat[1][0], prev_pose_Rmat[0][0])
 
                         # Pose Change Calculation
-                        dx = current_x - prev_x
-                        dy = current_y - prev_y
-                        dz = current_z - prev_z
+                        dx = 100 * (current_x - prev_x)
+                        dy = 100 * (current_y - prev_y)
+                        dz = 100 * (current_z - prev_z)
 
                         droll = current_roll - prev_roll
                         dpitch = current_pitch - prev_pitch
