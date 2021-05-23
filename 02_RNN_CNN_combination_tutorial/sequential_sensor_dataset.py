@@ -1,10 +1,24 @@
 import os
 import os.path
+
 import numpy as np
+np.random.seed(42)
+
 import csv
-from numpy.lib.shape_base import dsplit
+
+import random
+random.seed(42)
 
 import torch
+torch.manual_seed(42)
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark=False
+os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+
+torch.cuda.manual_seed(42)
+torch.cuda.manual_seed_all(42)
+
 import torch.utils.data
 import torchvision.transforms.functional as TF
 from torchvision import transforms
