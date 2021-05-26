@@ -6,23 +6,23 @@ import argparse
 import cv2 as cv
 
 import numpy as np
-np.random.seed(42)
+# np.random.seed(42)
 
 import datetime
 
 import random
-random.seed(42)
+# random.seed(42)
 
 import torch
 
-torch.manual_seed(42)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+# torch.manual_seed(42)
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
 
-os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+# os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
-torch.cuda.manual_seed(42)
-torch.cuda.manual_seed_all(42)
+# torch.cuda.manual_seed(42)
+# torch.cuda.manual_seed_all(42)
 
 import torch.nn as nn
 from torch import device
@@ -76,7 +76,23 @@ args = vars(ap.parse_args())
 device = torch.device('cuda:' + args['cuda_num'] if torch.cuda.is_available() else 'cpu')
 print(device)
 
-preprocess = transforms.Compose([
+train_preprocess = transforms.Compose([
+    transforms.Resize((192, 640)),
+    transforms.CenterCrop((192, 640)),
+    transforms.RandomApply(torch.nn.ModuleList([transforms.ColorJitter()]), p=0.55),
+    transforms.RandomApply(torch.nn.ModuleList([transforms.GaussianBlur(kernel_size=3)]), p=0.55),
+    # transforms.RandomHorizontalFlip(p=0.5),
+    transforms.ToTensor(),
+    # transforms.RandomErasing(p=0.3),
+])
+
+valid_preprocess = transforms.Compose([
+    transforms.Resize((192, 640)),
+    transforms.CenterCrop((192, 640)),
+    transforms.ToTensor(),
+])
+
+test_preprocess = transforms.Compose([
     transforms.Resize((192, 640)),
     transforms.CenterCrop((192, 640)),
     transforms.ToTensor(),
@@ -92,29 +108,68 @@ sequence_length = args['sequence_length']
 
 mode = args['execution_mode']
 
-training_sequence = ['00', '01', '03', '06', '08', '10']
-valid_sequence = ['02', '04', '05', '07', '09']
+training_sequence = ['00', '01', '03', '05', '06', '08', '10']
+valid_sequence = ['02', '04', '07', '09']
 test_sequence = ['02']
 
-dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
+train_dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
                                     img_dataset_path=args['input_img_file_path'], 
                                     pose_dataset_path=args['input_pose_file_path'],
                                     train_sequence=training_sequence, 
                                     valid_sequence=valid_sequence, 
                                     test_sequence=test_sequence,
                                     sequence_length=sequence_length,
-                                    train_transform=preprocess,
-                                    valid_transform=preprocess,
-                                    test_transform=preprocess,)
+                                    train_transform=train_preprocess,
+                                    valid_transform=valid_preprocess,
+                                    test_transform=test_preprocess,
+                                    mode='training',)
+
+valid_dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
+                                    img_dataset_path=args['input_img_file_path'], 
+                                    pose_dataset_path=args['input_pose_file_path'],
+                                    train_sequence=training_sequence, 
+                                    valid_sequence=valid_sequence, 
+                                    test_sequence=test_sequence,
+                                    sequence_length=sequence_length,
+                                    train_transform=train_preprocess,
+                                    valid_transform=valid_preprocess,
+                                    test_transform=test_preprocess,
+                                    mode='validation')
+
+test_dataset = sequential_sensor_dataset(lidar_dataset_path=args['input_lidar_file_path'], 
+                                    img_dataset_path=args['input_img_file_path'], 
+                                    pose_dataset_path=args['input_pose_file_path'],
+                                    train_sequence=training_sequence, 
+                                    valid_sequence=valid_sequence, 
+                                    test_sequence=test_sequence,
+                                    sequence_length=sequence_length,
+                                    train_transform=train_preprocess,
+                                    valid_transform=valid_preprocess,
+                                    test_transform=test_preprocess,
+                                    mode='test',)
 
 start_time = str(datetime.datetime.now())
 
 training_shuffle = True
+validation_shuffle = True
 evaluation_shuffle = False
 
 if mode == 'training':
 
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=training_shuffle, num_workers=10, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
+    # CNN_type = 'new'
+    CNN_type = 'mobilenetV3_large'
+    # CNN_type = 'vgg16'
+    CNN_freeze = False
+
+    hidden_size = 1000
+    num_layers = 2
+
+    gradient_clip = 0
+
+    regression = 'full_sequence'
+
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=training_shuffle, num_workers=10, drop_last=True, collate_fn=train_dataset.collate_fn, prefetch_factor=10, persistent_workers=False, pin_memory=True)
+    valid_dataloader = DataLoader(dataset=valid_dataset, batch_size=batch_size, shuffle=validation_shuffle, num_workers=10, drop_last=True, collate_fn=valid_dataset.collate_fn, prefetch_factor=10, persistent_workers=False, pin_memory=True)
 
     print('Mode : Training')
     print('Training Epoch : ' + str(EPOCH))
@@ -123,8 +178,7 @@ if mode == 'training':
 
     train_learning_rate = 0.001
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=train_learning_rate)
-    CRNN_VO_model.train()
+    CRNN_VO_model = CNN_RNN(device=device, cnn_type=CNN_type, cnn_freeze=CNN_freeze, rnn_type='lstm', bidirection='False', regression=regression, input_sequence_length=sequence_length, hidden_size=hidden_size, num_layers=num_layers, learning_rate=train_learning_rate)
 
     # Tensorboard run command : tensorboard --logdir=./runs
     training_writer = SummaryWriter(log_dir='./runs/' + start_time + '/CRNN_VO_training')
@@ -138,21 +192,7 @@ if mode == 'training':
         print('[EPOCH : {}]'.format(str(epoch)))
         
         ### Training ####################################################################
-
-        dataloader.dataset.mode = 'training'
-        CRNN_VO_model.train(True)
-
-        # Manual model mode setting for training / Make sure that bathcnorm's trakcing and FC/RNN/LSTM's dropout are activated
-        for module in CRNN_VO_model.modules():
-            if isinstance(module, nn.BatchNorm2d):
-                module.track_running_stats=True
-                print(module)
-            elif isinstance(module, nn.RNN):
-                module.dropout=0.5
-                print(module)
-            elif isinstance(module, nn.LSTM):
-                module.dropout=0.5
-                print(module)
+        CRNN_VO_model.train()
 
         if epoch == 0:
             if os.path.exists('./' + start_time) == False:
@@ -166,11 +206,15 @@ if mode == 'training':
                 hyperparam_file.write('valid_sequence : {} \n'.format(valid_sequence))
                 hyperparam_file.write('test_sequence : {} \n'.format(test_sequence))
                 hyperparam_file.write('train_learning_rate : {} \n'.format(train_learning_rate))
+                hyperparam_file.write('gradient_clip : {} \n'.format(gradient_clip))
+                hyperparam_file.write('training preprocess : {} \n'.format(train_preprocess))
+                hyperparam_file.write('validation preprocess : {} \n'.format(valid_preprocess))
+                hyperparam_file.write('regression : {} \n'.format(regression))
                 hyperparam_file.close()
 
         print('Current State [Training] - [EPOCH : {}]'.format(str(epoch)))
 
-        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(train_dataloader)):
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
@@ -191,13 +235,13 @@ if mode == 'training':
 
                 CRNN_VO_model.optimizer.zero_grad()
                 train_loss = CRNN_VO_model.translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3])
-
                 train_loss.backward()
+                if gradient_clip != 0:
+                    torch.nn.utils.clip_grad_norm_(CRNN_VO_model.parameters(), gradient_clip)
                 CRNN_VO_model.optimizer.step()
 
-                training_writer.add_scalar('Immediate Loss (Translation) | Batch Size : {} | Sequence Length : {} | Learning Rate : {} | Optimizer : {} | Shuffle : {}'.format(batch_size, sequence_length, train_learning_rate, type(CRNN_VO_model.optimizer), training_shuffle), train_loss.item(), plot_step_training)
+                training_writer.add_scalar('Immediate Loss (Translation) | CNN Type : {} | CNN Freeze : {} | Batch Size : {} | Sequence Length : {} | Hidden Size : {} | RNN Num : {} | Clip : {} | Regression : {} | Learning Rate : {} | Optimizer : {} | Shuffle : {}'.format(CNN_type, CNN_freeze,batch_size, sequence_length, hidden_size, num_layers, gradient_clip, regression, train_learning_rate, type(CRNN_VO_model.optimizer), training_shuffle), train_loss.item(), plot_step_training)
                 plot_step_training += 1
-
 
                 if DATA_DISPLAY_ON is True:
 
@@ -226,30 +270,15 @@ if mode == 'training':
 
 
         ### Validation ###############################################################
-
-        dataloader.dataset.mode = 'validation'
         CRNN_VO_model.eval()
-        CRNN_VO_model.train(False)
-
-        # Manual model mode setting for evaluation / Make sure that bathcnorm's trakcing and FC/RNN/LSTM's dropout are deactivated
-        for module in CRNN_VO_model.modules():
-            if isinstance(module, nn.BatchNorm2d):
-                module.track_running_stats=False
-                print(module)
-            elif isinstance(module, nn.RNN):
-                module.dropout=0.0
-                print(module)
-            elif isinstance(module, nn.LSTM):
-                module.dropout=0.0
-                print(module)
-
+    
         valid_translation_loss = nn.MSELoss()
 
         print('Current State [Validation] - [EPOCH : {}]'.format(str(epoch)))
 
         with torch.no_grad():
 
-            for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
+            for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(valid_dataloader)):
 
                 if (current_img_tensor != None) and (pose_6DOF_tensor != None):
 
@@ -270,7 +299,7 @@ if mode == 'training':
 
                     valid_loss = valid_translation_loss(pose_est_output[:, :3], pose_6DOF_tensor[:, :3])
 
-                    validation_writer.add_scalar('Immediate Loss (Translation) | Batch Size : {} | Sequence Length : {} | Learning Rate : {} | Optimizer : {} | Shuffle : {}'.format(batch_size, sequence_length, train_learning_rate, type(CRNN_VO_model.optimizer), training_shuffle), valid_loss.item(), plot_step_validation)
+                    validation_writer.add_scalar('Immediate Loss (Translation) | CNN Type : {} | CNN Freeze : {} | Batch Size : {} | Sequence Length : {} | Hidden Size : {} | RNN Num : {} | Clip : {} | Regression : {} | Learning Rate : {} | Optimizer : {} | Shuffle : {}'.format(CNN_type, CNN_freeze,batch_size, sequence_length, hidden_size, num_layers, gradient_clip, regression, train_learning_rate, type(CRNN_VO_model.optimizer), training_shuffle), valid_loss.item(), plot_step_validation)
                     plot_step_validation += 1
 
         torch.save({
@@ -284,36 +313,32 @@ if mode == 'training':
 
 elif mode == 'test':
 
+    CNN_type = 'mobilenetV3_large'
+    # CNN_type = 'vgg16'
+    CNN_freeze = False
+
+    hidden_size = 1000
+    num_layers = 2
+
+    regression = 'full_sequence'
+
     test_batch_size = 1
 
-    dataloader = DataLoader(dataset=dataset, batch_size=test_batch_size, shuffle=evaluation_shuffle, num_workers=4, drop_last=True, collate_fn=dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
-    dataloader.dataset.mode = 'test'
-
+    test_dataloader = DataLoader(dataset=test_dataset, batch_size=test_batch_size, shuffle=evaluation_shuffle, num_workers=4, drop_last=True, collate_fn=test_dataset.collate_fn, prefetch_factor=20, persistent_workers=True)
+   
     print('Mode : Test')
     print('Batch Size : ' + str(test_batch_size))
     print('Sequence Length : ' + str(sequence_length))
 
-    CRNN_VO_model = CNN_RNN(device=device, hidden_size=1000, learning_rate=0.001)
+    test_learning_rate = 0.001
 
-    # checkpoint = torch.load(args['pre_trained_network_path'], map_location='cuda:' + args['cuda_num'])
-    checkpoint = torch.load(args['pre_trained_network_path'], map_location='cpu')
+    CRNN_VO_model = CNN_RNN(device=device, cnn_type=CNN_type, cnn_freeze=CNN_freeze, rnn_type='lstm', bidirection='False', regression=regression, input_sequence_length=sequence_length, hidden_size=hidden_size, num_layers=num_layers, learning_rate=test_learning_rate)
+
+    checkpoint = torch.load(args['pre_trained_network_path'], map_location='cuda:' + args['cuda_num'])
 
     CRNN_VO_model.load_state_dict(checkpoint['CRNN_VO_model'])
-    CRNN_VO_model.to(device)
-    CRNN_VO_model.eval()
-    CRNN_VO_model.train(False)
 
-    # Manual model mode setting for evaluation / Make sure that bathcnorm's trakcing and FC/RNN/LSTM's dropout are deactivated
-    for module in CRNN_VO_model.modules():
-        if isinstance(module, nn.BatchNorm2d):
-            module.track_running_stats=False
-            print(module)
-        elif isinstance(module, nn.RNN):
-            module.dropout=0.0
-            print(module)
-        elif isinstance(module, nn.LSTM):
-            module.dropout=0.0
-            print(module)
+    CRNN_VO_model.eval()
 
     test_writer = SummaryWriter(log_dir='./runs/' + start_time + '/CRNN_VO_test', flush_secs=1)
     plot_step_test = 0
@@ -332,11 +357,9 @@ elif mode == 'test':
 
     with torch.no_grad():
 
-        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(dataloader)):
+        for batch_idx, (current_seq, current_img_tensor, pose_6DOF_tensor) in enumerate(tqdm(test_dataloader)):
 
             if (current_img_tensor != None) and (pose_6DOF_tensor != None):
-
-                # print('Current State [Test] - [Batch Idx : {}]'.format(str(batch_idx)))
 
                 current_img_tensor = current_img_tensor.to(device).float()
                 pose_6DOF_tensor = pose_6DOF_tensor.to(device).float()
