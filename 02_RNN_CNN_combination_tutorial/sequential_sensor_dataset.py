@@ -2,22 +2,22 @@ import os
 import os.path
 
 import numpy as np
-np.random.seed(42)
+# np.random.seed(42)
 
 import csv
 
 import random
-random.seed(42)
+# random.seed(42)
 
 import torch
-torch.manual_seed(42)
+# torch.manual_seed(42)
 
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark=False
-os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark=False
+# os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':16:8'
 
-torch.cuda.manual_seed(42)
-torch.cuda.manual_seed_all(42)
+# torch.cuda.manual_seed(42)
+# torch.cuda.manual_seed_all(42)
 
 import torch.utils.data
 import torchvision.transforms.functional as TF
@@ -72,7 +72,7 @@ class seq_dataset_dict_generator():
             header_seq_data_list = []
             for i in range(sequence_length):
                 header_seq_data_list.append('Img [{}] Path'.format(i))
-            header_unit_list = ['current_x [cm]', 'current_y [cm]', 'current_z [cm]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
+            header_unit_list = ['current_x [m]', 'current_y [m]', 'current_z [m]', 'current_roll [rad]', 'current_pitch [rad]', 'current_yaw [rad]']
             
             header_list = header_idx_list + header_seq_data_list + header_unit_list
             
@@ -142,9 +142,9 @@ class seq_dataset_dict_generator():
                         prev_yaw = np.arctan2(prev_pose_Rmat[1][0], prev_pose_Rmat[0][0])
 
                         # Pose Change Calculation
-                        dx = 100 * (current_x - prev_x)
-                        dy = 100 * (current_y - prev_y)
-                        dz = 100 * (current_z - prev_z)
+                        dx = (current_x - prev_x)
+                        dy = (current_y - prev_y)
+                        dz = (current_z - prev_z)
 
                         droll = current_roll - prev_roll
                         dpitch = current_pitch - prev_pitch
@@ -237,6 +237,9 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
             self.test_data_list.append(row_data)
         test_dataset_dict.close()
 
+    def switch_mode(self, mode):
+
+        self.mode = mode
 
     ### Invalid data filtering (Exception handling for dataloader) ###
     # Reference : https://discuss.pytorch.org/t/questions-about-dataloader-and-dataset/806/3
@@ -248,12 +251,17 @@ class sequential_sensor_dataset(torch.utils.data.Dataset):
 
         if self.mode == 'training':
             item = self.train_data_list[index]
+            # print('training')
+            # print(item)
 
         elif self.mode == 'validation':
             item = self.valid_data_list[index]
+            # print('validation')
+            # print(item)
 
         elif self.mode == 'test':
             item = self.test_data_list[index]
+            # print(item)
         
         current_seq = item[1]
 
